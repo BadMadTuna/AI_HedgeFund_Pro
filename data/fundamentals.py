@@ -39,4 +39,33 @@ def fetch_fundamentals(ticker: str) -> dict:
         print(f"FMP PEG Ratio Error for {ticker}: {e}")
         fundamentals["PEG_Ratio"] = "N/A"
 
+    try:
+        # Pull the historical earnings calendar
+        earnings = obb.equity.calendar.earnings(symbol=ticker, provider="fmp").to_df()
+        
+        # Ensure the required columns exist
+        if not earnings.empty and 'eps_actual' in earnings.columns and 'eps_estimated' in earnings.columns:
+            
+            # Drop future dates where earnings haven't happened yet
+            past_earnings = earnings.dropna(subset=['eps_actual', 'eps_estimated'])
+            
+            if not past_earnings.empty:
+                eps_actual = float(past_earnings['eps_actual'].iloc[0])
+                eps_est = float(past_earnings['eps_estimated'].iloc[0])
+                
+                # Calculate the percentage beat/miss
+                if eps_est != 0:
+                    surprise_pct = ((eps_actual - eps_est) / abs(eps_est)) * 100
+                    fundamentals["Last_Earnings_Surprise_%"] = round(surprise_pct, 2)
+                else:
+                    fundamentals["Last_Earnings_Surprise_%"] = "N/A"
+            else:
+                fundamentals["Last_Earnings_Surprise_%"] = "N/A"
+        else:
+            fundamentals["Last_Earnings_Surprise_%"] = "N/A"
+            
+    except Exception as e:
+        print(f"FMP Earnings Error for {ticker}: {e}")
+        fundamentals["Last_Earnings_Surprise_%"] = "N/A"
+
     return fundamentals
