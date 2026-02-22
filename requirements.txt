@@ -1,7 +1,8 @@
 gradio==4.19.2
 pandas
 numpy
-openbb[fmp]
+openbb
+openbb-fmp
 google-generativeai
 python-dotenv
 sqlalchemy
