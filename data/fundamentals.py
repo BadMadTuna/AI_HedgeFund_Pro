@@ -2,8 +2,9 @@ import os
 import requests
 import yfinance as yf
 
-# 1. Get the FMP API key from your .env file
-fmp_key = os.getenv("FMP_API_KEY")
+# 1. Get the FMP API key and STRICTLY clean it of Linux systemd quote traps
+raw_key = os.getenv("FMP_API_KEY", "")
+fmp_key = raw_key.replace('"', '').replace("'", "").strip()
 
 def fetch_fundamentals(ticker: str) -> dict:
     """Bypasses OpenBB to directly hit the FMP REST API for bulletproof data."""
@@ -18,24 +19,27 @@ def fetch_fundamentals(ticker: str) -> dict:
 
     # Stop here if the API key isn't loaded
     if not fmp_key:
-        print("CRITICAL: FMP API Key missing. Skipping FMP direct calls.")
+        print("CRITICAL: FMP API Key is missing or empty.")
         fundamentals["PEG_Ratio"] = "N/A"
         fundamentals["Last_Earnings_Surprise_%"] = "N/A"
         return fundamentals
 
     # --- 2. PEG RATIO (Direct FMP API) ---
     try:
-        # Hitting the Trailing Twelve Months (TTM) Ratios endpoint
         url = f"https://financialmodelingprep.com/api/v3/ratios-ttm/{ticker}?apikey={fmp_key}"
         response = requests.get(url).json()
         
-        if isinstance(response, list) and len(response) > 0:
+        # Catch FMP's hidden error messages
+        if isinstance(response, dict) and "Error Message" in response:
+            print(f"FMP AUTH ERROR (PEG): {response['Error Message']}")
+            fundamentals["PEG_Ratio"] = "N/A"
+        elif isinstance(response, list) and len(response) > 0:
             peg = response[0].get("pegRatioTTM")
             fundamentals["PEG_Ratio"] = round(float(peg), 2) if peg is not None else "N/A"
         else:
             fundamentals["PEG_Ratio"] = "N/A"
     except Exception as e:
-        print(f"FMP PEG API Error for {ticker}: {e}")
+        print(f"FMP PEG API Request Error for {ticker}: {e}")
         fundamentals["PEG_Ratio"] = "N/A"
 
     # --- 3. EARNINGS SURPRISE (Direct FMP API) ---
@@ -43,8 +47,11 @@ def fetch_fundamentals(ticker: str) -> dict:
         url = f"https://financialmodelingprep.com/api/v3/earnings-surprises/{ticker}?apikey={fmp_key}"
         response = requests.get(url).json()
         
-        if isinstance(response, list) and len(response) > 0:
-            # FMP returns the newest quarter first at index 0
+        # Catch FMP's hidden error messages
+        if isinstance(response, dict) and "Error Message" in response:
+            print(f"FMP AUTH ERROR (Earnings): {response['Error Message']}")
+            fundamentals["Last_Earnings_Surprise_%"] = "N/A"
+        elif isinstance(response, list) and len(response) > 0:
             latest = response[0]
             actual = latest.get("actualEarningResult")
             est = latest.get("estimatedEarning")
@@ -57,7 +64,7 @@ def fetch_fundamentals(ticker: str) -> dict:
         else:
             fundamentals["Last_Earnings_Surprise_%"] = "N/A"
     except Exception as e:
-        print(f"FMP Earnings API Error for {ticker}: {e}")
+        print(f"FMP Earnings API Request Error for {ticker}: {e}")
         fundamentals["Last_Earnings_Surprise_%"] = "N/A"
 
     return fundamentals
