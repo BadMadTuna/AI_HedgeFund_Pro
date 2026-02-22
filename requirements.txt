@@ -1,9 +1,9 @@
 gradio==4.19.2
 pandas
 numpy
-openbb>=4.0.0
-openbb-fmp>=4.0.0
-openbb-yfinance>=4.0.0
+openbb>=4.3.0
+openbb-fmp
+openbb-yfinance
 google-generativeai
 python-dotenv
 sqlalchemy
