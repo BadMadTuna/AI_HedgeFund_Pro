@@ -1,4 +1,4 @@
-gradio==4.19.2
+gradio
 pandas
 numpy
 openbb>=4.3.0

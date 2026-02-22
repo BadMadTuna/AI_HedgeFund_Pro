@@ -1,0 +1,70 @@
+https://bhdpnlgslmilpaz7hc22zp7qoy0djftn.lambda-url.eu-central-1.on.aws/
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Hedge Fund Gateway</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #f3f4f6; margin: 0; }
+        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
+        button { background-color: #2563eb; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        button:hover { background-color: #1d4ed8; }
+        button:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        #status { margin-top: 20px; font-size: 16px; color: #4b5563; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>🦅 AI Hedge Fund Pro</h2>
+    <p>The server is currently sleeping to save costs.</p>
+    <button id="startBtn" onclick="wakeServer()">Wake Server & Launch</button>
+    <div id="status"></div>
+</div>
+
+<script>
+    // --- CONFIGURE THIS ---
+    const LAMBDA_URL = "https://bhdpnlgslmilpaz7hc22zp7qoy0djftn.lambda-url.eu-central-1.on.aws/";
+    const ELASTIC_IP_URL = "http://YOUR_ELASTIC_IP:7860/";
+
+    async function wakeServer() {
+        const btn = document.getElementById("startBtn");
+        const status = document.getElementById("status");
+        
+        btn.disabled = true;
+        btn.innerText = "Booting...";
+        status.innerText = "Sending wake signal to AWS...";
+
+        try {
+            // Ping the Lambda Function URL
+            const response = await fetch(LAMBDA_URL, { method: "POST" });
+            
+            if (response.ok) {
+                // Wait 15 seconds for the EC2 to boot and systemd to start Gradio
+                status.innerText = "Server is starting! Redirecting in 15 seconds...";
+                let countdown = 15;
+                const timer = setInterval(() => {
+                    countdown--;
+                    status.innerText = `Server is starting! Redirecting in ${countdown} seconds...`;
+                    if (countdown <= 0) {
+                        clearInterval(timer);
+                        window.location.href = ELASTIC_IP_URL; // Redirect to the app
+                    }
+                }, 1000);
+            } else {
+                status.innerText = "Failed to wake server. Check AWS console.";
+                btn.disabled = false;
+                btn.innerText = "Try Again";
+            }
+        } catch (error) {
+            status.innerText = "Network error. Make sure CORS is enabled on the Lambda URL.";
+            btn.disabled = false;
+            btn.innerText = "Try Again";
+        }
+    }
+</script>
+
+</body>
+</html>
