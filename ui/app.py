@@ -120,10 +120,16 @@ def batch_ai_analysis(df):
         ticker = row['Symbol']
         verdict = analyze_ticker(ticker) 
         
-        # Parse the AI's label
-        if "BUY" in verdict.upper(): df.at[index, 'AI_Verdict'] = "🟢 BUY"
-        elif "AVOID" in verdict.upper(): df.at[index, 'AI_Verdict'] = "🔴 AVOID"
-        else: df.at[index, 'AI_Verdict'] = "⚪ HOLD / CAUTION"
+        # --- FIXED: STRICT PARSING LOGIC ---
+        upper_verdict = verdict.upper()
+        
+        # We now explicitly look for the "VERDICT:" anchor
+        if "VERDICT: BUY" in upper_verdict or "VERDICT: STRONG BUY" in upper_verdict:
+            df.at[index, 'AI_Verdict'] = "🟢 BUY"
+        elif "VERDICT: AVOID" in upper_verdict or "VERDICT: SELL" in upper_verdict:
+            df.at[index, 'AI_Verdict'] = "🔴 AVOID"
+        else: 
+            df.at[index, 'AI_Verdict'] = "⚪ HOLD / CAUTION"
         
     return df
 
