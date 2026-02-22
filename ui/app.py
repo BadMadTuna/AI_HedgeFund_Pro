@@ -4,19 +4,22 @@ import time
 import os
 import sys
 import sqlite3
+import pandas as pd
 from datetime import datetime
 
-# Add root to path so we can import our modules
+# --- PATH CONFIG ---
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJECT_ROOT)
 
-# Ensure data directory exists for the SQLite database
+# Ensure data directory exists for SQLite
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 os.makedirs(DATA_DIR, exist_ok=True)
 
+# --- CUSTOM MODULES ---
 from data.fundamentals import fetch_fundamentals
 from strategy.technicals import analyze_stock_technicals
 from agents.hunter_agent import generate_buy_verdict
+from strategy.scanner import run_market_scan
 
 # --- AUTO SHUTDOWN LOGIC (Saves AWS Costs) ---
 LAST_INTERACTION = time.time()
@@ -42,12 +45,10 @@ def save_ai_pick_to_db(ticker, qty, cost, target):
         return "⚠️ Please enter a ticker first."
     
     try:
-        # Connect to your new SQLite database
         db_path = os.path.join(DATA_DIR, 'hedge_fund.db')
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # Failsafe: Ensure the table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS portfolio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +61,6 @@ def save_ai_pick_to_db(ticker, qty, cost, target):
             )
         ''')
         
-        # Insert the trade
         date_str = datetime.now().strftime('%Y-%m-%d')
         cursor.execute('''
             INSERT INTO portfolio (ticker, cost, quantity, target, date, status)
@@ -73,44 +73,83 @@ def save_ai_pick_to_db(ticker, qty, cost, target):
     except Exception as e:
         return f"❌ Database Error: {str(e)}"
 
-# --- APP LOGIC ---
+# --- SINGLE TICKER ANALYZER ---
 def analyze_ticker(ticker):
     keep_alive()
     if not ticker: return "Please enter a ticker."
     
-    # 1. Fetch Technicals (Price, RSI, Moving Averages)
+    # 1. Fetch Technicals
     try:
         tech_data = analyze_stock_technicals(ticker)
     except Exception as e:
         print(f"Technicals Error: {e}")
-        tech_data = {"Current_Price": "N/A", "RSI": "N/A", "SMA_50": "N/A"}
+        tech_data = {"Current_Price": "Data Error", "RSI": "Data Error", "SMA_50": "Data Error"}
         
-    # 2. Fetch Fundamentals (Targets, PEG Ratios)
+    # 2. Fetch Fundamentals
     try:
         fund_data = fetch_fundamentals(ticker)
     except Exception as e:
         print(f"Fundamentals Error: {e}")
         fund_data = {"Target_Price": "N/A", "PEG_Ratio": "N/A", "Last_Earnings_Surprise_%": "N/A"}
     
-    # 3. Merge them into one massive dictionary
+    # 3. Merge & Analyze
     full_quant_payload = {**tech_data, **fund_data}
-    
-    # 4. Hand the complete payload to the AI
     verdict = generate_buy_verdict(ticker, full_quant_payload)
     return verdict
 
-# --- MOBILE FRIENDLY UI ---
+# --- SCANNER LOGIC ---
+def execute_quant_scan():
+    """Runs the pure-math S&P 500 scanner"""
+    keep_alive()
+    df = run_market_scan(max_results=10)
+    # Ensure AI_Verdict column exists
+    if not df.empty and "AI_Verdict" not in df.columns:
+        df["AI_Verdict"] = "Pending..."
+    return df
+
+def batch_ai_analysis(df):
+    """Passes the scanner survivors to Gemini"""
+    keep_alive()
+    if df is None or df.empty:
+        return df
+        
+    if "AI_Verdict" not in df.columns:
+        df['AI_Verdict'] = "⏳ Processing..."
+    
+    for index, row in df.iterrows():
+        ticker = row['Symbol']
+        verdict = analyze_ticker(ticker) 
+        
+        # Parse the AI's label
+        if "BUY" in verdict.upper(): df.at[index, 'AI_Verdict'] = "🟢 BUY"
+        elif "AVOID" in verdict.upper(): df.at[index, 'AI_Verdict'] = "🔴 AVOID"
+        else: df.at[index, 'AI_Verdict'] = "⚪ HOLD / CAUTION"
+        
+    return df
+
+# --- UI LAYOUT ---
 css_style = ".gradio-container { max-width: 100% !important; overflow-x: hidden; padding: 10px; }"
 
 with gr.Blocks(theme=gr.themes.Soft(), css=css_style) as app:
     gr.Markdown("# 🦅 AI Hedge Fund Pro")
     
+    # TAB 1: The Quantamental Funnel
+    with gr.Tab("📡 S&P 500 Scanner"):
+        with gr.Row():
+            scan_btn = gr.Button("1️⃣ Run Quant Filter (Top 10)", variant="primary")
+            ai_batch_btn = gr.Button("2️⃣ Run AI Analysis on Results", variant="secondary")
+            
+        scan_results = gr.Dataframe(headers=["Symbol", "Price", "SMA_50", "Momentum_%", "RSI", "AI_Verdict"])
+        
+        scan_btn.click(execute_quant_scan, outputs=scan_results)
+        ai_batch_btn.click(batch_ai_analysis, inputs=scan_results, outputs=scan_results)
+        
+    # TAB 2: Deep Dive & Save
     with gr.Tab("🔍 Analyzer"):
         ticker_input = gr.Textbox(label="Enter Ticker (e.g. AAPL)")
         btn = gr.Button("Analyze", variant="primary")
         output = gr.Markdown()
         
-        # --- NEW: SAVE TO PORTFOLIO WIDGET ---
         with gr.Accordion("💾 Save AI Pick to Portfolio", open=False):
             with gr.Row():
                 save_qty = gr.Number(label="Shares to Buy", value=10)
@@ -119,7 +158,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=css_style) as app:
             save_btn = gr.Button("✅ Confirm & Save to SQLite", variant="primary")
             save_msg = gr.Markdown()
             
-    # Wire up the buttons
+    # Wire the analyzer and DB buttons
     btn.click(analyze_ticker, inputs=ticker_input, outputs=output)
     save_btn.click(save_ai_pick_to_db, inputs=[ticker_input, save_qty, save_cost, save_target], outputs=save_msg)
 
