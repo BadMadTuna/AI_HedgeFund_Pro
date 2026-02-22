@@ -27,7 +27,7 @@ https://bhdpnlgslmilpaz7hc22zp7qoy0djftn.lambda-url.eu-central-1.on.aws/
 <script>
     // --- CONFIGURE THIS ---
     const LAMBDA_URL = "https://bhdpnlgslmilpaz7hc22zp7qoy0djftn.lambda-url.eu-central-1.on.aws/";
-    const ELASTIC_IP_URL = "http://YOUR_ELASTIC_IP:7860/";
+    const ELASTIC_IP_URL = "http://18.194.215.68:7860/";
 
     async function wakeServer() {
         const btn = document.getElementById("startBtn");
@@ -39,7 +39,7 @@ https://bhdpnlgslmilpaz7hc22zp7qoy0djftn.lambda-url.eu-central-1.on.aws/
 
         try {
             // Ping the Lambda Function URL
-            const response = await fetch(LAMBDA_URL, { method: "POST" });
+            const response = await fetch(LAMBDA_URL, { method: "GET", mode: "cors" });
             
             if (response.ok) {
                 // Wait 15 seconds for the EC2 to boot and systemd to start Gradio
