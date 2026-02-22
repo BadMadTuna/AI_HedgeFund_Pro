@@ -14,7 +14,16 @@ def fetch_fundamentals(ticker: str) -> dict:
         fundamentals["Target_Price"] = info.get("targetMeanPrice", "N/A")
         
         # --- 2. PEG RATIO ---
-        fundamentals["PEG_Ratio"] = info.get("pegRatio", "N/A")
+        peg_forward = info.get("pegRatio")
+        peg_trailing = info.get("trailingPegRatio")
+        
+        # Prefer the forward-looking PEG, but fall back to the trailing PEG if it's missing
+        if peg_forward is not None:
+            fundamentals["PEG_Ratio"] = round(float(peg_forward), 2)
+        elif peg_trailing is not None:
+            fundamentals["PEG_Ratio"] = round(float(peg_trailing), 2)
+        else:
+            fundamentals["PEG_Ratio"] = "N/A"
         
         # --- 3. EARNINGS SURPRISE ---
         try:
